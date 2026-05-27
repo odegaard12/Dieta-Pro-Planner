@@ -1,0 +1,11 @@
+services:
+  dieta-tracker-oscar:
+    build: .
+    container_name: dieta-tracker-oscar
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data

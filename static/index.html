@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dieta Pro Planner · v0.0.2</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="avatar">D</div><div><h1>Dieta Pro</h1><p>Raspberry · local · privado</p></div></div>
+      <nav id="nav" class="nav"></nav>
+      <div class="side-rule"><span>Regla de hoy</span><b>Proteína + aceite medido</b><small>5 g normal · 10 g máximo. Pasta/arroz siempre en seco.</small></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><div class="eyebrow">Dieta controlada</div><h2 id="pageTitle">Resumen</h2></div>
+        <div class="top-actions"><button id="btnRefresh" class="ghost">Actualizar</button><a class="ghost" href="/api/export" target="_blank">Exportar DB</a></div>
+      </header>
+      <div class="rule-banner" role="note" aria-label="Regla de hoy">
+        <span>Regla de hoy</span>
+        <strong>Proteína + aceite medido</strong>
+        <small>5 g normal · 10 g máximo · pasta/arroz siempre en seco.</small>
+      </div>
+      <div class="global-cta" aria-label="Acciones principales">
+        <button class="cta-food" onclick="go('register')"><span>🍽️</span><b>Registrar comida</b></button>
+        <button class="cta-sport" onclick="go('sport')"><span>🏋️</span><b>Registrar entreno</b></button>
+        <button class="cta-weight" onclick="go('weights')"><span>⚖️</span><b>Registrar peso</b></button>
+        <button class="cta-template" onclick="go('templates')"><span>⚡</span><b>Plantillas</b></button>
+      </div>
+      <section id="view"></section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

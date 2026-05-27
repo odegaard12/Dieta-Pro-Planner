@@ -1,0 +1,13 @@
+# Datos privados locales
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.env
+strava_tokens.json
+backups/
+*.zip
+__pycache__/
+.pytest_cache/
+.DS_Store

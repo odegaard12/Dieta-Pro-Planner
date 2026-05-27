@@ -1,0 +1,4 @@
+Flask
+requests
+
+# Dependencies intentionally minimal.

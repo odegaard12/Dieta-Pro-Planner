@@ -1,6 +1,6 @@
 # Diet Pro Planner
 
-**Current version:** v0.0.4
+**Current version:** v0.0.5
 
 Local-first web app for tracking body weight, meals by grams, reusable foods, meal templates, workouts, weekly plans and optional integrations.
 

@@ -18,7 +18,42 @@ function foodByName(n){return state.foods.find(f=>f.name===n)} function foodById
 function calcFood(f,g){const factor=Number(g||0)/100; return {food_id:f.id,food_name:f.name,grams:Number(g||0),kcal:f.kcal*factor,protein:f.protein*factor,carbs:f.carbs*factor,fat:f.fat*factor,sugar:f.sugar*factor,salt:f.salt*factor}}
 function calcList(items){return items.reduce((a,i)=>{a.kcal+=Number(i.kcal||0);a.protein+=Number(i.protein||0);a.fat+=Number(i.fat||0);a.carbs+=Number(i.carbs||0);a.oil+=/aceite/i.test(i.food_name)?Number(i.grams||0):0;return a},{kcal:0,protein:0,fat:0,carbs:0,oil:0})}
 function mealAdvice(items){const t=calcList(items); let cls='good',label='BIEN',text='Buen plato para bajar peso y mantener fuerza.'; if(t.kcal<250){cls='warn';label='POCO';text='Puede quedarse corto: añade proteína o fruta si toca entrenar.'} if(t.protein<20){cls='warn';label='MÁS PROTEÍNA';text='Sube pollo, huevos, atún, yogur o queso fresco.'} if(t.kcal>850){cls='bad';label='ALTO';text='Ración alta: reduce carbohidrato, pan o cantidad total.'} if(t.oil>10){cls='bad';label='ACEITE ALTO';text='Aceite alto: 5 g normal, 10 g máximo.'} if(t.kcal>=350&&t.kcal<=750&&t.protein>=25&&t.oil<=10){cls='good';label='BIEN';text='Buen plato: saciante, proteína decente y aceite controlado.'} return {cls,label,text,t}}
-function assistantFor(d=day()){const mt=mealTotals(byDate(state.meals,d)); const sport=workoutTotals(byDate(state.workouts,d)); const lw=latestWeight(); const tips=[]; if(!lw) tips.push('Registra peso oficial de mañana para empezar tendencia.'); else if(!lw.official) tips.push('Último peso es referencia: el bueno es por la mañana, después baño y antes de desayunar.'); if(mt.protein<90) tips.push('Proteína baja: prioriza pollo, huevos, atún, yogur o queso fresco batido.'); else if(mt.protein<130) tips.push('Proteína bastante bien, pero podrías acercarte a 130 g.'); else tips.push('Proteína cubierta hoy.'); if(mt.oil>15) tips.push('Aceite alto hoy: la próxima deja 5–10 g por plato.'); if(mt.kcal>2100) tips.push('Kcal altas: cena limpia y nada de pan/chocolate extra.'); else if(mt.kcal<900) tips.push('Aún vas bajo de comida registrada: no llegues con hambre brutal a la noche.'); else tips.push('Día razonable: controla aceite y raciones.'); if(sport>300) tips.push('Buen gasto de actividad, pero no lo conviertas en barra libre.'); return tips}
+function assistantFor(d=day()){
+  const meals=byDate(state.meals,d);
+  const workouts=byDate(state.workouts,d);
+  const mt=mealTotals(meals);
+  const sport=workoutTotals(workouts);
+  const lw=latestWeight();
+  const tips=[];
+  const names=meals.flatMap(m=>[m.name,m.notes||'',...(m.items||[]).map(i=>i.food_name)]).join(' ').toLowerCase();
+  const hasSweet=/chocolate|galleta|piruleta|dulce|tirma/.test(names);
+  const hasCarb=/pasta|arroz|pan|plátano|platano|tortita/.test(names);
+  const dinnerDone=meals.some(m=>/cena/i.test(m.name));
+
+  if(!lw) tips.push('Registra un peso oficial por la mañana para empezar tendencia.');
+  else if(!lw.official) tips.push('Último peso es referencia: el bueno es por la mañana, después baño y antes de desayunar.');
+
+  if(mt.protein<90) tips.push('Proteína baja: prioriza pollo, huevos, atún, yogur proteico, jamón cocido extra o queso fresco batido.');
+  else if(mt.protein<130) tips.push('Proteína bastante bien, pero intenta acercarte a 130 g si hoy entrenas o cenas tarde.');
+  else tips.push('Proteína cubierta hoy.');
+
+  if(mt.oil>15) tips.push('Aceite alto hoy: próxima comida con sartén antiadherente y 0–5 g.');
+  else if(mt.oil>10) tips.push('Aceite algo alto: no pases de 5 g en la siguiente comida.');
+
+  if(hasSweet && sport<500) tips.push('Ya hubo dulce: cena limpia, sin pan/arroz extra y con verdura + proteína.');
+  if(hasSweet && sport>=500) tips.push('Hubo dulce, pero también deporte: no castigues; cena proteica y carbo controlado si hay hambre real.');
+
+  if(sport>=900) tips.push('Día de mucho gasto: puedes meter carbo controlado, pero mantén proteína y no conviertas el deporte en barra libre.');
+  else if(sport>=300) tips.push('Buen gasto de actividad: recupera con proteína, no con picoteo.');
+
+  if(mt.kcal>2300) tips.push('Kcal altas: resto del día limpio, agua/infusión y sin más snacks.');
+  else if(mt.kcal<900 && !dinnerDone) tips.push('Aún vas bajo de comida registrada: no llegues con hambre brutal a la noche.');
+  else if(mt.kcal>=900 && mt.kcal<=2100) tips.push('Día razonable: controla aceite, raciones y cena según hambre real.');
+
+  if(!hasCarb && sport>=700) tips.push('Con ese deporte y pocos hidratos, una ración pequeña de arroz/pasta puede tener sentido.');
+
+  return [...new Set(tips)].slice(0,6)
+}
 function render(){const titles={home:'Resumen',register:'Registrar / comida',templates:'Plantillas rápidas',foods:'Alimentos comprados',sport:'Registrar deporte',plan:'Plan semanal',weights:'Historial de peso',integrations:'Integraciones',history:'Historial completo'}; setTitle(titles[page]); if(page==='home')renderHome(); if(page==='register')renderRegister(); if(page==='templates')renderTemplates(); if(page==='foods')renderFoods(); if(page==='sport')renderSport(); if(page==='plan')renderPlan(); if(page==='weights')renderWeights(); if(page==='integrations')renderIntegrations(); if(page==='history')renderHistory()}
 function metric(icon,title,value,sub){return `<div class="card metric"><span class="icon">${icon}</span><div><small>${title}</small><br><b>${value}</b></div><small>${sub}</small></div>`}
 function dateBar(){const label=day()===today()?'Día de hoy':'Día seleccionado';return `<div class="datebar"><div class="field"><label>${label}</label><input id="dashDate" type="date" value="${day()}" onchange="selectedDate=this.value;localStorage.setItem('selectedDate',selectedDate);render()"></div><button class="btn secondary" onclick="selectedDate=today();localStorage.setItem('selectedDate',selectedDate);render()">Ir a hoy real</button><span class="muted">Así no se mezclan actividades de ayer con hoy.</span></div>`}
@@ -402,13 +437,13 @@ function renderIntegrations(){
   function stableHeader(){
     document.documentElement.lang = 'es';
     document.documentElement.dataset.lang = 'es';
-    document.title = 'Diet Pro Planner · v0.0.8';
+    document.title = 'Diet Pro Planner · v0.0.9';
     const brand = document.querySelector('.brand h1');
     if(brand) brand.textContent = 'Diet Pro Planner';
     const sub = document.querySelector('.brand p');
     if(sub) sub.textContent = 'Raspberry · local · privado';
     const eyebrow = document.querySelector('.eyebrow');
-    if(eyebrow) eyebrow.textContent = 'Dieta controlada · v0.0.8';
+    if(eyebrow) eyebrow.textContent = 'Dieta controlada · v0.0.9';
     const lang = document.querySelector('#btnLang');
     if(lang) lang.remove();
   }

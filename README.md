@@ -1,6 +1,6 @@
 # Diet Pro Planner
 
-**Current version:** v0.0.10
+**Current version:** v0.0.11
 
 Local-first web app for tracking body weight, meals by grams, reusable foods, meal templates, workouts, weekly plans and optional integrations.
 
@@ -12,17 +12,16 @@ Designed to run privately on a Raspberry Pi with Docker. Your personal data stay
 - Meal logging by saved foods and grams.
 - Reusable meal templates where you can adjust quantities before saving.
 - Product catalog with brand, nutrition values and optional local label photo.
+- Local OCR helper for food labels using Tesseract.
+- OCR3 parser with validation, cache and known-label correction for common products.
 - Manual workout logging.
 - Strava OAuth connection through localhost.
 - Manual Strava import by date range.
 - Optional Strava auto-sync in the Raspberry background.
-- Curated local product catalog for common foods used in the plan.
-- Practical meal templates for breakfast, tupper meals, clean dinners, post-workout dinners and snacks.
-- Improved rule-based assistant for protein, sweets, oil, sport load and dinner choices.
-- Improved official weight chart with kg labels, trend and weekly-rate estimate.
-- Faster weight entry presets for official morning, post-breakfast, post-workout and night reference weights.
-- Smarter daily assistant rules for protein, calories, oil, sport and snack/dessert context.
-- Compact food-label helper with optional photo and pasted OCR/text parser.
+- Strava calories are read from detailed activity data when available.
+- UI5 blue responsive layout with redesigned sidebar, topbar, dashboard cards and daily rule cards.
+- Sport dashboard with 7-day summary and compact workout cards.
+- Editable weekly plan board with horizontal day cards.
 - Local SQLite database in `data/dieta.db`.
 
 ## Privacy
@@ -30,6 +29,7 @@ Designed to run privately on a Raspberry Pi with Docker. Your personal data stay
 Do not commit local or private files. The repository excludes them through `.gitignore`:
 
 - `data/`
+- `uploads/`
 - `*.db`
 - `*.sqlite`
 - `.env`
@@ -37,6 +37,7 @@ Do not commit local or private files. The repository excludes them through `.git
 - backups
 - ZIP files
 - local label photos
+- OCR cache files
 
 ## Docker
 
@@ -80,11 +81,29 @@ Tokens are stored locally under `data/` and are excluded from Git.
 - Auto-sync imports newly detected activities every configured interval.
 - A visible status message shows the latest successful sync time.
 
+## OCR food labels
+
+Food-label OCR is local-first:
+
+- photos stay local,
+- OCR results are editable before saving,
+- impossible nutrition values are discarded,
+- repeated image reads can use local OCR cache.
+
 ## Releases
 
 - `v0.0.1`: first clean public release.
 - `v0.0.2`: manual Strava import by date range.
 - `v0.0.3`: branding, app icon, ES/EN toggle and Strava auto-preview.
 - `v0.0.4`: background Strava auto-sync and last-sync status.
-- `v0.0.10`: curated products, practical meal templates and improved meal assistant.
-- `v0.0.10`: improved weight system, smarter assistant and compact food-label helper.
+- `v0.0.5`: safe UI translation cleanup.
+- `v0.0.6`: stable Spanish UI after removing broken translation layer.
+- `v0.0.7`: UTF-8 cleanup and Strava detailed-activity calorie import.
+- `v0.0.8`: sidebar daily-rule visibility fix.
+- `v0.0.9`: curated products, practical templates and improved assistant.
+- `v0.0.10`: improved weight system and compact food-label helper.
+- `v0.0.11`: UI5 redesign, OCR3 label parser, sport dashboard and editable weekly plan.
+
+## Notes
+
+This repository contains only the public application code. Local user data, databases, environment files, Strava tokens, backups, OCR cache files and uploaded label photos must remain private.

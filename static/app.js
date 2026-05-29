@@ -133,7 +133,7 @@ function renderFoods(){
   selectedFoodPhoto='';
   $('#view').innerHTML=`<div class="grid cols-2">
     <div class="card"><h3>🥫 Nuevo alimento</h3>
-      <div class="photo-box"><div><b>📷 Foto etiqueta</b><small>Opcional: guarda la foto para revisar componentes. De momento no hace OCR automático.</small></div><input id="fPhoto" type="file" accept="image/*" onchange="uploadFoodPhoto()"><div id="photoPreview"></div></div>
+      <div class="photo-box"><div><b>📷 Foto etiqueta</b><small>OCR real local: sube foto, revisa las sugerencias y guarda.</small></div><input id="fPhoto" type="file" accept="image/*" onchange="uploadFoodPhoto()"><div id="photoPreview"></div></div>
       <div class="row">
         <div class="field span-6"><label>Nombre</label><input id="fName" placeholder="Ej. Yogur Eroski +Proteína 120 g"></div>
         <div class="field span-6"><label>Marca</label><input id="fBrand" placeholder="Eroski, ElPozo..."></div>
@@ -150,14 +150,41 @@ function renderFoods(){
       </div>
       <button class="btn" onclick="saveFood()">Guardar alimento</button>
     </div>
-    <div class="card note-box"><h3>📌 Cómo añadir por foto</h3><p>Sube la foto de la etiqueta, copia los valores por 100 g o por ración y guarda. La foto queda asociada al producto para revisarla después.</p><p class="muted">OCR automático se puede añadir después, pero prefiero no inventar datos de etiqueta.</p></div>
+    <div class="card note-box"><h3>📌 OCR de etiqueta</h3><p>Sube la foto de la etiqueta, copia los valores por 100 g o por ración y guarda. La foto queda asociada al producto para revisarla después.</p><p class="muted">OCR local activo: rellena solo valores plausibles. Revisa siempre antes de guardar.</p></div>
   </div>
   <div class="section-title"><div><h3>Alimentos guardados</h3><p>Se usan en Registrar para cambiar solo gramos.</p></div><input id="foodFilter" placeholder="filtrar..." style="max-width:300px" oninput="renderFoodList()"></div>
   <div id="foodList" class="grid cols-3"></div>`;
   renderFoodList();
 }
 function renderFoodList(){const q=($('#foodFilter')?.value||'').toLowerCase(); const foods=state.foods.filter(f=>(f.name+' '+f.brand+' '+f.source_note).toLowerCase().includes(q)); $('#foodList').innerHTML=foods.map(f=>`<div class="card food-card">${f.photo_path?`<img class="food-photo" src="${f.photo_path}" alt="foto etiqueta">`:''}<h3>${f.purchased?'✅':'🥫'} ${f.name}</h3><p class="muted">${f.brand||''}</p><div class="chips"><span class="chip">${fmt(f.kcal)} kcal/100g</span><span class="chip">${fmt(f.protein)} g prot</span><span class="chip">típico ${fmt(f.typical_g)} g</span></div><p class="source">${f.source_note||''}</p><p>${f.notes||''}</p></div>`).join('')}
-async function uploadFoodPhoto(){const file=$('#fPhoto')?.files?.[0]; if(!file)return; const form=new FormData(); form.append('photo',file); try{const r=await apiForm('/api/food-photo',form); selectedFoodPhoto=r.photo_path; $('#photoPreview').innerHTML=`<img class="food-photo preview" src="${selectedFoodPhoto}" alt="foto etiqueta"><span class="pill good">foto guardada</span>`; toast('Foto guardada');}catch(e){toast(e.message)}}
+async function uploadFoodPhoto(){
+  const file=$('#fPhoto')?.files?.[0];
+  if(!file)return;
+  const form=new FormData();
+  form.append('photo',file);
+  try{
+    const r=await apiForm('/api/food-photo-ocr',form);
+    selectedFoodPhoto=r.photo_path;
+    const text=r.ocr_text||'';
+    const n=r.nutrition||{};
+    if($('#photoPreview')){
+      $('#photoPreview').innerHTML=`<img class="food-photo preview" src="${selectedFoodPhoto}" alt="foto etiqueta"><span class="pill good">foto guardada</span>${text?'<span class="pill good">OCR leído</span>':`<span class="pill warn">OCR sin texto</span>`}`;
+    }
+    if($('#labelText') && text) $('#labelText').value=text;
+    const fill=(id,val)=>{const el=$(id); if(el && val!==undefined && val!==null && val!=='') el.value=String(val).replace('.',',').replace(',','.');};
+    fill('#fKcal', n.kcal);
+    fill('#fProt', n.protein);
+    fill('#fCarbs', n.carbs);
+    fill('#fFat', n.fat);
+    fill('#fSugar', n.sugar);
+    fill('#fSalt', n.salt);
+    fill('#fTypical', n.typical_g);
+    if($('#fSource') && text) $('#fSource').value=(text.length>900?text.slice(0,900)+'…':text);
+    toast(text?'Foto guardada y OCR interpretado':'Foto guardada; revisa OCR manual');
+  }catch(e){
+    toast(e.message);
+  }
+}
 async function saveFood(){await api('/api/foods',{method:'POST',body:JSON.stringify({name:$('#fName').value,brand:$('#fBrand').value,kcal:$('#fKcal').value,protein:$('#fProt').value,carbs:$('#fCarbs').value,fat:$('#fFat').value,sugar:$('#fSugar').value,salt:$('#fSalt').value,typical_g:$('#fTypical').value,purchased:$('#fPurchased').value==='1',source_note:$('#fSource').value,notes:$('#fNotes').value,photo_path:selectedFoodPhoto})}); toast('Alimento guardado'); await load(); page='foods'; renderNav(); render()}
 function renderSport(){ $('#view').innerHTML=`<div class="grid cols-2"><div class="card"><h3>🏋️ Nuevo entreno</h3><div class="row"><div class="field span-4"><label>Fecha</label><input id="sDate" type="date" value="${today()}"></div><div class="field span-3"><label>Hora</label><input id="sTime" type="time" value="${nowHM()}"></div><div class="field span-5"><label>Ejercicio</label><select id="sName">${state.exercises.map(e=>`<option>${e.name}</option>`).join('')}</select></div><div class="field span-3"><label>Minutos</label><input id="sMin" type="number"></div><div class="field span-3"><label>Distancia km</label><input id="sKm" type="number"></div><div class="field span-3"><label>Calorías reloj</label><input id="sKcal" type="number" placeholder="vacío = estima"></div><div class="field span-3"><label>&nbsp;</label><button class="btn" onclick="saveWorkout()">Guardar</button></div><div class="field span-12"><label>Notas</label><input id="sNotes"></div></div></div><div class="card"><h3>➕ Nuevo ejercicio</h3><div class="row"><div class="field span-6"><label>Nombre</label><input id="eName"></div><div class="field span-3"><label>MET</label><input id="eMet" type="number" value="5"></div><div class="field span-3"><label>&nbsp;</label><button class="btn" onclick="saveExercise()">Guardar</button></div><div class="field span-12"><label>Notas</label><input id="eNotes"></div></div></div></div><div class="section-title"><h3>Historial deporte</h3></div><div class="list">${state.workouts.map(workoutCard).join('')}</div>`}
 async function saveWorkout(){await api('/api/workouts',{method:'POST',body:JSON.stringify({date:$('#sDate').value,time:$('#sTime').value,name:$('#sName').value,minutes:$('#sMin').value,distance_km:$('#sKm').value,kcal:$('#sKcal').value,notes:$('#sNotes').value})}); toast('Entreno guardado'); selectedDate=$('#sDate').value; localStorage.setItem('selectedDate',selectedDate); await load(); page='home'; renderNav(); render()}
@@ -437,13 +464,13 @@ function renderIntegrations(){
   function stableHeader(){
     document.documentElement.lang = 'es';
     document.documentElement.dataset.lang = 'es';
-    document.title = 'Diet Pro Planner · v0.0.10';
+    document.title = 'Diet Pro Planner · v0.0.11';
     const brand = document.querySelector('.brand h1');
     if(brand) brand.textContent = 'Diet Pro Planner';
     const sub = document.querySelector('.brand p');
     if(sub) sub.textContent = 'Raspberry · local · privado';
     const eyebrow = document.querySelector('.eyebrow');
-    if(eyebrow) eyebrow.textContent = 'Dieta controlada · v0.0.10';
+    if(eyebrow) eyebrow.textContent = 'Dieta controlada · v0.0.11';
     const lang = document.querySelector('#btnLang');
     if(lang) lang.remove();
   }
@@ -483,259 +510,514 @@ function renderIntegrations(){
 })();
 
 
-/* V010_WEIGHT_FOOD_UI_START */
 
-function normKey(s){
-  return String(s||'')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\?/g,'n')
-    .replace(/\b(etiqueta|estimado|estimada|clasico|clásico)\b/g,'')
-    .replace(/\s+/g,' ')
-    .trim();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* DPP_UI5_FULL_REDESIGN_START */
+const UI5_NAV={home:['🏠','Resumen','Panel diario'],register:['🍽️','Registrar','Comidas'],sport:['🏋️','Deporte','Strava/manual'],templates:['⚡','Plantillas','2 clics'],foods:['🥫','Alimentos','Productos/OCR'],plan:['📅','Plan','Semana'],weights:['⚖️','Peso','Historial'],integrations:['🔗','Integraciones','Strava'],history:['📚','Historial','Todo']};
+function renderNav(){const nav=$('#nav'); if(!nav)return; nav.innerHTML=PAGES.map(([id,ico,label])=>{const p=UI5_NAV[id]||[ico,label,''];return `<button class="${page===id?'active':''}" data-page="${id}"><span class="nav-ico">${p[0]}</span><span class="nav-copy"><b>${p[1]}</b><small>${p[2]}</small></span></button>`}).join('');document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;renderNav();render()})}
+function ui5OfficialWeights(){return state.weights.filter(w=>w.official).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))}
+function ui5Trend(){const ws=ui5OfficialWeights(); if(ws.length<2)return{label:'Sin tendencia',cls:'neutral',text:'Registra 2+ pesos oficiales de mañana.'}; const f=ws[0],l=ws.at(-1),days=Math.max(1,(new Date(l.date)-new Date(f.date))/(1000*3600*24)),delta=Number(l.kg)-Number(f.kg); if(days<7||ws.length<5)return{label:delta<0?'Bajada inicial':delta>0?'Subida inicial':'Estable',cls:'info',text:`${fmt(delta)} kg desde ${f.date}. Pocos días: sin extrapolar kg/semana.`}; const weekly=delta/days*7; if(weekly<-1)return{label:'Bajada rápida',cls:'warn',text:`${fmt(delta)} kg · ${fmt(weekly)} kg/sem aprox.`}; if(weekly<-0.35)return{label:'Bajada correcta',cls:'good',text:`${fmt(delta)} kg · ${fmt(weekly)} kg/sem aprox.`}; if(delta>0)return{label:'Subiendo',cls:'bad',text:`${fmt(delta)} kg · ${fmt(weekly)} kg/sem aprox.`}; return{label:'Estable',cls:'info',text:`${fmt(delta)} kg · ${fmt(weekly)} kg/sem aprox.`}}
+function weightChart(){const ws=ui5OfficialWeights().slice(-14); if(ws.length<2)return '<div class="empty">Cuando tengas 2+ pesos oficiales aparece la gráfica.</div>'; const vals=ws.map(w=>Number(w.kg)),min=Math.min(...vals)-.25,max=Math.max(...vals)+.25,W=640,H=280,L=68,R=32,T=42,B=56,pw=W-L-R,ph=H-T-B,x=i=>L+(ws.length===1?0:i*(pw/(ws.length-1))),y=v=>T+(max-v)/(max-min)*ph,pts=ws.map((w,i)=>`${x(i)},${y(Number(w.kg))}`).join(' '); const ticks=[min,(min+max)/2,max].map(v=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="rgba(31,60,90,.13)"/><text x="14" y="${y(v)+5}" font-size="13" font-weight="800" fill="#314964">${fmt(v)}</text>`).join(''); const dots=ws.map((w,i)=>`<g><circle cx="${x(i)}" cy="${y(Number(w.kg))}" r="7" fill="#2563eb" stroke="#fff" stroke-width="3"/><text x="${x(i)}" y="${y(Number(w.kg))-14}" text-anchor="middle" font-size="13" font-weight="900" fill="#0b1726">${fmt(w.kg)}</text><title>${w.date} ${w.time}: ${fmt(w.kg)} kg</title></g>`).join(''); const tr=ui5Trend(); return `<div class="ui5-chartbox"><svg class="chart ui5-weight-chart" viewBox="0 0 ${W} ${H}">${ticks}<polyline points="${pts}" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>${dots}<text x="${L}" y="${H-18}" font-size="13" font-weight="800" fill="#54677f">${ws[0].date}</text><text x="${W-R}" y="${H-18}" text-anchor="end" font-size="13" font-weight="800" fill="#54677f">${ws.at(-1).date}</text></svg><div class="ui5-trend"><span class="ui5-chip ${tr.cls}">${tr.label}</span><b>${tr.text}</b></div></div>`}
+function assistantFor(d=day()){const meals=byDate(state.meals,d),workouts=byDate(state.workouts,d),mt=mealTotals(meals),sport=workoutTotals(workouts),lw=latestWeight(),tr=ui5Trend(),names=meals.flatMap(m=>[m.name,m.notes||'',...(m.items||[]).map(i=>i.food_name)]).join(' ').toLowerCase(),tips=[]; if(!lw)tips.push('Registra peso oficial de mañana para construir tendencia real.'); else if(!lw.official)tips.push('Último peso es referencia; para tendencia usa mañana, después de baño y antes de desayunar.'); else tips.push(`Peso oficial: ${fmt(lw.kg)} kg. ${tr.text}`); if(mt.protein<80)tips.push('Proteína baja: prioriza pollo, huevos, atún, yogur proteico, jamón cocido extra o queso fresco batido.'); else if(mt.protein<120)tips.push('Proteína aceptable: intenta cerrar cerca de 130 g.'); else tips.push('Proteína bien cubierta hoy.'); if(mt.kcal<900)tips.push('Comida registrada baja: planifica comida/cena para no llegar con ansiedad.'); else if(mt.kcal>2300)tips.push('Kcal altas: siguiente comida limpia, sin dulce ni pan/arroz extra.'); else tips.push('Balance razonable: controla aceite y raciones.'); if(mt.oil>10)tips.push('Aceite alto: siguiente comida con sartén antiadherente y 0–5 g.'); if(sport>=900)tips.push('Mucho deporte: carbohidrato controlado sí, barra libre no.'); else if(sport>=300)tips.push('Buen gasto de actividad: recupera con proteína, no con picoteo.'); if(/chocolate|galleta|piruleta|dulce|tirma/.test(names))tips.push('Hubo dulce/snack: cierra con proteína + verdura.'); return [...new Set(tips)].slice(0,6)}
+function ui5Progress(label,value,pct,sub,tone='good'){return `<article class="ui5-progress ${tone}"><div><span>${label}</span><b>${value}</b></div><i><em style="width:${Math.max(4,Math.min(100,pct))}%"></em></i><small>${sub}</small></article>`}
+function quickActions(){return `<section class="quick-actions ui5-actions"><button class="quick primary" onclick="go('register')"><span>🍽️</span><b>Comida</b><small>alimentos + gramos</small></button><button class="quick sport" onclick="go('sport')"><span>🏋️</span><b>Entreno</b><small>Strava/manual</small></button><button class="quick weight" onclick="go('weights')"><span>⚖️</span><b>Peso</b><small>oficial/referencia</small></button><button class="quick" onclick="go('templates')"><span>⚡</span><b>Plantilla</b><small>cambia gramos</small></button><button class="quick help-tile" onclick="openHelpModal()"><span>❔</span><b>Ayuda</b><small>guía rápida</small></button></section>`}
+function renderHome(){const lw=latestWeight(),meals=byDate(state.meals),workouts=byDate(state.workouts),mt=mealTotals(meals),sport=workoutTotals(workouts),protTarget=135,kcalTarget=Math.max(1500,1900+Math.min(sport,900)*.35),tr=ui5Trend(); $('#view').innerHTML=`<section class="ui5-hero"><div class="ui5-hero-copy"><span class="ui5-kicker">Diet Pro Planner · local</span><h2>Panel diario para comer, entrenar y ajustar sin perder tiempo.</h2><p>Comidas por gramos, peso oficial, OCR de etiquetas, Strava y asistente en una vista clara.</p><div class="ui5-pills"><span><small>Peso</small><b>${lw?fmt(lw.kg)+' kg':'—'}</b></span><span><small>Proteína</small><b>${fmt(mt.protein)} / ${protTarget} g</b></span><span><small>Actividad</small><b>${fmt(sport)} kcal</b></span><span><small>Tendencia</small><b>${tr.label}</b></span></div></div><div class="ui5-hero-panel">${ui5Progress('Proteína',fmt(mt.protein)+' g',mt.protein/protTarget*100,'Objetivo 130–150 g',mt.protein>=120?'good':'warn')}${ui5Progress('Comida',fmt(mt.kcal)+' kcal',mt.kcal/kcalTarget*100,'Objetivo flexible '+fmt(kcalTarget)+' kcal aprox.',mt.kcal>2300?'bad':'good')}${ui5Progress('Actividad',fmt(sport)+' kcal',Math.min(100,sport/10),sport?'Actividad registrada':'Sin entrenos hoy',sport>900?'warn':'good')}</div></section>${quickActions()}${dateBar()}<div class="grid cols-4 dashboard-metrics">${metric('⚖️','Último peso',lw?`${fmt(lw.kg)} kg`:'—',lw?`${lw.date} ${lw.time} · ${lw.official?'oficial':'referencia'}`:'sin datos')}${metric('🍽️','Comido',fmt(mt.kcal),'kcal estimadas')}${metric('💪','Proteína',`${fmt(mt.protein)} g`,'objetivo 130–150 g')}${metric('🔥','Actividad',fmt(sport),'kcal del día seleccionado')}</div><div class="grid cols-2 home-main" style="margin-top:14px"><div class="card assistant compact-assistant"><h3>🤖 Asistente</h3><ul>${assistantFor().map(x=>`<li>${x}</li>`).join('')}</ul></div><div class="card"><h3>📉 Peso oficial</h3>${weightChart()}<p class="muted">Solo pesos oficiales de mañana. Con pocos días no extrapolamos kg/semana.</p></div></div><div class="day-columns"><section class="card day-panel"><div class="section-title compact-title"><div><h3>🍽️ Comidas</h3><p>${fmt(mt.kcal)} kcal · ${fmt(mt.protein)} g prot.</p></div><button class="btn small" onclick="go('register')">+ Comida</button></div><div class="compact-list">${meals.length?meals.map(mealCardCompact).join(''):'<div class="empty">Sin comidas.</div>'}</div></section><section class="card day-panel"><div class="section-title compact-title"><div><h3>🏋️ Actividad</h3><p>${fmt(sport)} kcal</p></div><button class="btn small" onclick="go('sport')">+ Entreno</button></div><div class="compact-list">${workouts.length?workouts.map(workoutCardCompact).join(''):'<div class="empty">Sin entrenos para este día.</div>'}</div></section></div><div class="footer-space"></div>`}
+function ui5ApplyShell(){document.documentElement.dataset.ui='ui5'; const e=document.querySelector('.eyebrow'); if(e)e.textContent='Dieta controlada · v0.0.11'; const r=document.querySelector('.rule-banner'); if(r&&r.dataset.ui5!=='1'){r.dataset.ui5='1';r.innerHTML=`<article class="ui5-rule protein"><span>Proteína</span><b>130–150 g/día</b><small>Prioridad antes de recortar de más.</small></article><article class="ui5-rule oil"><span>Aceite</span><b>5 g normal · 10 g máximo</b><small>Medido, no a ojo.</small></article><article class="ui5-rule carbs"><span>Pasta/arroz</span><b>Pesar en seco</b><small>Ración según deporte y hambre real.</small></article>`} const sr=document.querySelector('.sidebar .side-rule'); if(sr&&sr.dataset.ui5!=='1'){sr.dataset.ui5='1';sr.innerHTML='<span>Regla rápida</span><b>Proteína + aceite medido</b><small>Pasta/arroz en seco · dulces controlados.</small>'} if(!document.getElementById('ui5Badge')){const b=document.createElement('div');b.id='ui5Badge';b.className='ui5-badge';b.textContent='v0.0.11';document.querySelector('.topbar')?.appendChild(b)} if(!document.getElementById('floatingHelp')){const h=document.createElement('button');h.id='floatingHelp';h.className='floating-help';h.textContent='?';h.onclick=openHelpModal;h.title='Ayuda';document.body.appendChild(h)}}
+function openHelpModal(){closeHelpModal(); const o=document.createElement('div');o.id='helpOverlay';o.className='help-overlay';o.innerHTML=`<div class="help-modal"><button class="help-close" onclick="closeHelpModal()">×</button><span class="ui5-kicker">Ayuda rápida</span><h2>Diet Pro Planner</h2><div class="help-grid"><div><b>🍽️ Comidas</b><p>Usa plantillas, cambia gramos y guarda. Pasta/arroz siempre en seco.</p></div><div><b>⚖️ Peso</b><p>Oficial por la mañana. Post-comida, noche o post-entreno son referencia.</p></div><div><b>📷 OCR</b><p>Sube foto de etiqueta. Tesseract intenta leerla. Revisa valores antes de guardar.</p></div><div><b>🏋️ Strava</b><p>Importa por ID y evita duplicados. Auto-sync queda igual.</p></div><div><b>🤖 Asistente</b><p>Consejos por proteína, kcal, aceite, deporte y dulces.</p></div><div><b>🔐 Privacidad</b><p>Esta prueba es local. No sube DB, tokens, .env ni fotos al repo.</p></div></div><div class="help-actions"><button class="btn" onclick="closeHelpModal();go('register')">Registrar comida</button><button class="btn secondary" onclick="closeHelpModal();go('foods')">Alimentos/OCR</button><button class="btn secondary" onclick="closeHelpModal();go('weights')">Peso</button></div></div>`;o.onclick=e=>{if(e.target.id==='helpOverlay')closeHelpModal()};document.body.appendChild(o)}
+function closeHelpModal(){document.getElementById('helpOverlay')?.remove()}
+if(!window.__DPP_UI5_PATCHED__){window.__DPP_UI5_PATCHED__=true; const prev=render; render=function(){prev();setTimeout(ui5ApplyShell,0)}; window.addEventListener('DOMContentLoaded',()=>setTimeout(ui5ApplyShell,0)); setTimeout(()=>{try{renderNav();render();ui5ApplyShell()}catch(e){console.error(e)}},250); setInterval(ui5ApplyShell,3000)}
+/* DPP_UI5_FULL_REDESIGN_END */
+
+
+
+
+
+
+/* DPP_OCR3_FRONTEND_START */
+/* OCR3 frontend: faster feedback, exact known label support, concise source notes. */
+
+function ocr3Set(id, val){
+  const el=document.querySelector(id);
+  if(!el || val===undefined || val===null || val==='') return;
+  el.value=String(val).replace(',', '.');
 }
-
-function officialWeightsSorted(){
-  return state.weights
-    .filter(w=>w.official)
-    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+function ocr3Badge(text, cls='info'){
+  return `<span class="ocr3-badge ${cls}">${text}</span>`;
 }
+async function uploadFoodPhoto(){
+  const file=document.querySelector('#fPhoto')?.files?.[0];
+  if(!file) return;
 
-function weightTrend(){
-  const ws=officialWeightsSorted();
-  if(ws.length<2) return {label:'Sin tendencia aún', cls:'warn', text:'Registra 2+ pesos oficiales de mañana.', delta:0, weekly:0};
-  const first=ws[0], last=ws.at(-1);
-  const days=Math.max(1,(new Date(last.date)-new Date(first.date))/(1000*3600*24));
-  const delta=Number(last.kg)-Number(first.kg);
-  const weekly=delta/days*7;
-  let cls='good', label='Tendencia buena';
-  if(weekly<-1.0){cls='warn';label='Bajada rápida';}
-  else if(weekly<-0.75){cls='warn';label='Bajada algo rápida';}
-  else if(weekly>-0.15 && delta<0){cls='warn';label='Bajada lenta';}
-  else if(delta>0){cls='bad';label='Subiendo';}
-  return {label,cls,text:`${fmt(delta)} kg desde ${first.date} · ${fmt(weekly)} kg/sem aprox.`,delta,weekly,first,last};
-}
+  const preview=document.querySelector('#photoPreview');
+  if(preview) preview.innerHTML=`${ocr3Badge('leyendo OCR...', 'info')}`;
 
-function weightChart(){
-  const ws=officialWeightsSorted().slice(-14);
-  if(ws.length<2){
-    return '<div class="empty">Cuando tengas 2+ pesos oficiales aparece la gráfica.</div>';
-  }
-  const vals=ws.map(w=>Number(w.kg));
-  const min=Math.min(...vals)-0.25, max=Math.max(...vals)+0.25;
-  const W=360,H=205,L=44,R=16,T=22,B=42;
-  const plotW=W-L-R, plotH=H-T-B;
-  const yFor=v=>T+(max-v)/(max-min)*plotH;
-  const xFor=i=>L+(ws.length===1?0:i*(plotW/(ws.length-1)));
-  const pts=ws.map((w,i)=>`${xFor(i)},${yFor(Number(w.kg))}`).join(' ');
-  const grid=[min,(min+max)/2,max].map(v=>`
-    <line x1="${L}" y1="${yFor(v)}" x2="${W-R}" y2="${yFor(v)}" stroke="#e3ded2" stroke-width="1"/>
-    <text x="8" y="${yFor(v)+4}" font-size="11" fill="#697670">${fmt(v)}</text>`).join('');
-  const circles=ws.map((w,i)=>{
-    const x=xFor(i), y=yFor(Number(w.kg));
-    return `<g>
-      <circle cx="${x}" cy="${y}" r="5.5" fill="#0f8a6a"/>
-      <text x="${x}" y="${y-10}" text-anchor="middle" font-size="11" font-weight="800" fill="#0b4a3b">${fmt(w.kg)}</text>
-      <title>${w.date} ${w.time}: ${fmt(w.kg)} kg</title>
-    </g>`;
-  }).join('');
-  const first=ws[0], last=ws.at(-1);
-  const tr=weightTrend();
-  return `<div class="weight-chart-wrap">
-    <svg class="chart weight-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      ${grid}
-      <polyline points="${pts}" fill="none" stroke="#0b6b55" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      ${circles}
-      <text x="${L}" y="${H-14}" font-size="11" fill="#697670">${first.date}</text>
-      <text x="${W-R}" y="${H-14}" text-anchor="end" font-size="11" fill="#697670">${last.date}</text>
-    </svg>
-    <div class="trend-row">
-      <span class="pill ${tr.cls}">${tr.label}</span>
-      <b>${tr.text}</b>
-    </div>
-  </div>`;
-}
+  const form=new FormData();
+  form.append('photo', file);
 
-function assistantFor(d=day()){
-  const meals=byDate(state.meals,d);
-  const mt=mealTotals(meals);
-  const sport=workoutTotals(byDate(state.workouts,d));
-  const lw=latestWeight();
-  const tips=[];
-  const tr=weightTrend();
+  try{
+    const r=await apiForm('/api/food-photo-ocr', form);
+    selectedFoodPhoto=r.photo_path;
 
-  if(!lw) tips.push('Registra un peso oficial por la mañana para construir tendencia real.');
-  else if(!lw.official) tips.push('Último peso es referencia: para tendencia usa mañana, después de baño y antes de desayunar.');
-  else tips.push(`Último peso oficial: ${fmt(lw.kg)} kg. ${tr.label}: ${tr.text}.`);
+    const n=r.nutrition||{};
+    const product=r.product||{};
+    const serving=r.serving||{};
+    const extra=r.extra||{};
+    const warnings=r.warnings||[];
+    const conf=r.confidence||'baja';
 
-  if(mt.protein<80) tips.push('Proteína muy baja: prioriza pollo, huevos, atún, yogur proteico, jamón cocido extra o queso fresco batido.');
-  else if(mt.protein<120) tips.push('Proteína aceptable pero mejorable: intenta cerrar el día cerca de 130 g.');
-  else tips.push('Proteína bien cubierta hoy.');
+    const nameEl=document.querySelector('#fName');
+    const brandEl=document.querySelector('#fBrand');
+    if(nameEl && product.name) nameEl.value=product.name;
+    if(brandEl && product.brand) brandEl.value=product.brand;
 
-  if(mt.kcal<900) tips.push('Aún vas bajo de comida registrada: planifica comida/cena para no llegar con ansiedad.');
-  else if(mt.kcal>2300) tips.push('Kcal altas: siguiente comida limpia, sin pan, chocolate ni arroz extra.');
-  else tips.push('Balance razonable: controla aceite y raciones.');
+    ocr3Set('#fKcal', n.kcal);
+    ocr3Set('#fProt', n.protein);
+    ocr3Set('#fCarbs', n.carbs);
+    ocr3Set('#fFat', n.fat);
+    ocr3Set('#fSugar', n.sugar);
+    ocr3Set('#fSalt', n.salt);
+    ocr3Set('#fTypical', n.typical_g || product.typical_g || serving.grams);
 
-  if(mt.oil>15) tips.push('Aceite alto hoy: usa 5 g normal y 10 g máximo por plato.');
-  if(sport>900) tips.push('Día de mucho gasto: puedes meter carbohidrato controlado, pero con proteína y sin barra libre.');
-  else if(sport>300) tips.push('Buen gasto de actividad: recupera con proteína y carbohidrato medido.');
-
-  if(meals.some(m=>/snack|chocolate|galleta|piruleta/i.test((m.name||'')+' '+(m.notes||'')))) {
-    tips.push('Hubo dulce/snack: para cerrar el día, cena proteica y verdura.');
-  }
-  return tips;
-}
-
-function weightStatsCards(){
-  const all=[...state.weights].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  const off=officialWeightsSorted();
-  const last=all[0], lastOff=off.at(-1);
-  const tr=weightTrend();
-  return `<div class="grid cols-3 weight-stats">
-    <div class="card metric mini-metric"><small>Último registro</small><b>${last?fmt(last.kg)+' kg':'—'}</b><small>${last?`${last.date} ${last.time} · ${last.official?'oficial':'referencia'}`:'sin datos'}</small></div>
-    <div class="card metric mini-metric"><small>Último oficial</small><b>${lastOff?fmt(lastOff.kg)+' kg':'—'}</b><small>${lastOff?`${lastOff.date} ${lastOff.time}`:'mañana, después baño'}</small></div>
-    <div class="card metric mini-metric"><small>Tendencia</small><b>${tr.weekly?fmt(tr.weekly)+' kg/sem':'—'}</b><small>${tr.label}</small></div>
-  </div>`;
-}
-
-function setWeightPreset(kind){
-  const ctx=$('#wCtx'), type=$('#wOfficial'), time=$('#wTime');
-  if(!ctx||!type)return;
-  const map={
-    official:['1','mañana, después baño, antes de desayunar'],
-    breakfast:['0','después de desayunar, referencia'],
-    sport:['0','post-entreno/post-pádel, referencia'],
-    dinner:['0','noche/después de cenar, referencia'],
-    random:['0','referencia puntual']
-  };
-  const v=map[kind]||map.random;
-  type.value=v[0];
-  ctx.value=v[1];
-  if(time && kind==='official' && !time.value) time.value='08:00';
-}
-
-function renderWeights(){
-  const all=[...state.weights].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  $('#view').innerHTML=`${weightStatsCards()}
-  <div class="grid cols-2" style="margin-top:14px">
-    <div class="card"><h3>📉 Gráfica peso oficial</h3>${weightChart()}<p class="muted">La tendencia usa solo pesos oficiales de mañana. Tarde, noche y post-entreno son referencia.</p></div>
-    <div class="card weight-form"><h3>⚖️ Registrar peso</h3>
-      <div class="preset-row">
-        <button class="ghost small" onclick="setWeightPreset('official')">Oficial mañana</button>
-        <button class="ghost small" onclick="setWeightPreset('breakfast')">Después desayuno</button>
-        <button class="ghost small" onclick="setWeightPreset('sport')">Post-entreno</button>
-        <button class="ghost small" onclick="setWeightPreset('dinner')">Noche</button>
-      </div>
-      <div class="row">
-        <div class="field span-4"><label>Fecha</label><input id="wDate" type="date" value="${today()}"></div>
-        <div class="field span-3"><label>Hora</label><input id="wTime" type="time" value="${nowHM()}"></div>
-        <div class="field span-3"><label>Kg</label><input id="wKg" type="number" step="0.01" inputmode="decimal" placeholder="84.80"></div>
-        <div class="field span-2"><label>Tipo</label><select id="wOfficial"><option value="1">Oficial</option><option value="0">Referencia</option></select></div>
-        <div class="field span-12"><label>Contexto</label><input id="wCtx" placeholder="mañana después baño, post-entreno, noche..."></div>
-      </div>
-      <button class="btn" onclick="saveWeight()">Guardar peso</button>
-      <p class="muted weight-hint">Regla: solo el peso oficial de mañana cuenta para tendencia. Los demás explican agua, comida, sal y deporte.</p>
-    </div>
-  </div>
-  <div class="section-title"><h3>Historial de peso</h3></div>
-  <div class="list">${all.map(w=>`<div class="list-card weight-history-card"><header><div><h4>${w.date} ${w.time} · ${fmt(w.kg)} kg</h4><p class="muted">${w.official?'Oficial':'Referencia'} · ${w.context||''}</p></div><button class="btn small danger" onclick="deleteWeight(${w.id})">×</button></header></div>`).join('')}</div>`;
-}
-
-function findLabelNumber(txt, labels){
-  const t=String(txt||'').replace(/\s+/g,' ');
-  for(const l of labels){
-    const re=new RegExp(l+'[^0-9]{0,45}(\\d+[\\.,]?\\d*)','i');
-    const m=t.match(re);
-    if(m) return Number(m[1].replace(',','.'));
-  }
-  return '';
-}
-
-function parseFoodLabelText(){
-  const txt=$('#labelText')?.value||'';
-  if(!txt.trim()){toast('Pega texto de la etiqueta');return}
-  const kcal=findLabelNumber(txt,['kcal','valor energetico','energía','energia']);
-  const protein=findLabelNumber(txt,['prote[ií]nas?','proteina']);
-  const carbs=findLabelNumber(txt,['hidratos de carbono','carbohidratos']);
-  const fat=findLabelNumber(txt,['grasas?','grasa total']);
-  const sugar=findLabelNumber(txt,['az[uú]cares?','azucar']);
-  const salt=findLabelNumber(txt,['sal']);
-  const portion=(txt.match(/(?:porci[oó]n|unidad|raci[oó]n|envase)[^0-9]{0,30}(\d+[,.]?\d*)\s*g/i)||txt.match(/por\s+(\d+[,.]?\d*)\s*g/i)||[])[1];
-
-  if(kcal) $('#fKcal').value=kcal;
-  if(protein) $('#fProt').value=protein;
-  if(carbs) $('#fCarbs').value=carbs;
-  if(fat) $('#fFat').value=fat;
-  if(sugar) $('#fSugar').value=sugar;
-  if(salt) $('#fSalt').value=salt;
-  if(portion) $('#fTypical').value=Number(portion.replace(',','.'));
-  $('#fSource').value=(txt.length>900?txt.slice(0,900)+'…':txt);
-  toast('Etiqueta interpretada; revisa antes de guardar');
-}
-
-function uniqueFoodsForList(){
-  const q=($('#foodFilter')?.value||'').toLowerCase();
-  const map=new Map();
-  for(const f of state.foods){
-    const hay=(f.name+' '+f.brand+' '+f.source_note+' '+f.notes).toLowerCase();
-    if(q && !hay.includes(q)) continue;
-    let k=normKey(f.name)
-      .replace('judia verde plana eliges','judia verde plana eliges')
-      .replace('jamon cocido extra','jamon cocido extra')
-      .replace('queso larsa cremoso','queso larsa cremoso')
-      .replace('galletas pequenas con chocolate','galletas pequenas con chocolate');
-    if(!map.has(k)) map.set(k,f);
-    else{
-      const old=map.get(k);
-      const score=x=>(x.purchased?4:0)+(/[áéíóúñ]/i.test(x.name)?3:0)+(x.photo_path?2:0)+(x.source_note?1:0);
-      if(score(f)>score(old)) map.set(k,f);
+    const sourceParts=[];
+    sourceParts.push(`OCR ${r.ocr_engine||'local'} · modo ${r.ocr_mode||'-'} · confianza ${conf}${r.cache_hit?' · cache':''}.`);
+    if(product.name) sourceParts.push(`Producto: ${product.name}${product.brand?' · '+product.brand:''}.`);
+    if(serving.grams){
+      sourceParts.push(`Ración etiqueta ${serving.grams} g: ${serving.kcal??'-'} kcal · ${serving.protein??'-'} g prot · ${serving.fat??'-'} g grasa · ${serving.salt??'-'} g sal.`);
     }
+    if(extra.saturated!==undefined || extra.calcium_mg!==undefined){
+      sourceParts.push(`Extra por 100 g: saturadas ${extra.saturated??'-'} g · calcio ${extra.calcium_mg??'-'} mg.`);
+    }
+    if(warnings.length) sourceParts.push(`Avisos: ${warnings.slice(0,5).join(' | ')}`);
+    if(r.ocr_text) sourceParts.push((r.ocr_text.length>650?r.ocr_text.slice(0,650)+'…':r.ocr_text));
+
+    const source=document.querySelector('#fSource');
+    if(source) source.value=sourceParts.join('\n\n');
+
+    if(preview){
+      const fields=Object.keys(n).join(', ') || 'sin valores seguros';
+      const cls=conf==='alta'?'good':conf==='media'?'info':conf==='baja'?'warn':'bad';
+      preview.innerHTML=`
+        <img class="food-photo preview" src="${selectedFoodPhoto}" alt="foto etiqueta">
+        <div class="ocr3-status">
+          ${ocr3Badge('foto guardada','good')}
+          ${ocr3Badge(r.cache_hit?'OCR desde cache':'OCR leído','good')}
+          ${ocr3Badge('confianza '+conf,cls)}
+          <small>Campos: ${fields}</small>
+          ${warnings[0]?`<small class="ocr3-warn">${warnings[0]}</small>`:''}
+        </div>
+      `;
+    }
+    toast(r.cache_hit?'OCR desde cache: revisa y guarda':'OCR leído: revisa y guarda');
+  }catch(e){
+    if(preview) preview.innerHTML=ocr3Badge('error OCR','bad');
+    toast(e.message || 'Error OCR');
   }
-  return [...map.values()].sort((a,b)=>(b.purchased-a.purchased)||a.name.localeCompare(b.name,'es'));
 }
+/* DPP_OCR3_FRONTEND_END */
 
-function renderFoods(){
-  selectedFoodPhoto='';
-  $('#view').innerHTML=`<div class="food-top-grid">
-    <div class="card food-form-card"><h3>🥫 Nuevo alimento</h3>
-      <div class="compact-photo-box">
-        <div><b>📷 Foto etiqueta</b><small>Opcional. Guarda la foto y pega texto/OCR para rellenar campos.</small></div>
-        <input id="fPhoto" type="file" accept="image/*" onchange="uploadFoodPhoto()">
-        <div id="photoPreview"></div>
-      </div>
-      <details class="label-helper">
-        <summary>🧠 Asistente etiqueta / OCR manual</summary>
-        <p class="muted">Haz foto con el móvil, usa copiar texto/OCR y pégalo aquí. Rellena kcal, proteína, hidratos, grasa, azúcar, sal y ración si los detecta.</p>
-        <textarea id="labelText" placeholder="Pega aquí texto de la etiqueta nutricional..." style="min-height:86px"></textarea>
-        <button class="btn small" onclick="parseFoodLabelText()">Interpretar etiqueta</button>
-      </details>
-      <div class="row">
-        <div class="field span-6"><label>Nombre</label><input id="fName" placeholder="Ej. Yogur Eroski +Proteína 120 g"></div>
-        <div class="field span-6"><label>Marca</label><input id="fBrand" placeholder="Eroski, ElPozo..."></div>
-        <div class="field span-3"><label>kcal / 100 g</label><input id="fKcal" type="number" step="0.1"></div>
-        <div class="field span-3"><label>proteína / 100 g</label><input id="fProt" type="number" step="0.1"></div>
-        <div class="field span-3"><label>hidratos</label><input id="fCarbs" type="number" step="0.1"></div>
-        <div class="field span-3"><label>grasa</label><input id="fFat" type="number" step="0.1"></div>
-        <div class="field span-3"><label>azúcar</label><input id="fSugar" type="number" step="0.1"></div>
-        <div class="field span-3"><label>sal</label><input id="fSalt" type="number" step="0.01"></div>
-        <div class="field span-3"><label>ración g</label><input id="fTypical" type="number" value="100"></div>
-        <div class="field span-3"><label>Comprado</label><select id="fPurchased"><option value="1">Sí</option><option value="0">No</option></select></div>
-        <div class="field span-12"><label>Nota etiqueta</label><textarea id="fSource" placeholder="Ej. Por unidad 120 g: 68 kcal, 10 g proteína..."></textarea></div>
-        <div class="field span-12"><label>Uso</label><input id="fNotes" placeholder="Desayuno, merienda, tupper..."></div>
-      </div>
-      <button class="btn" onclick="saveFood()">Guardar alimento</button>
+
+/* DPP_UI5_PLAN_SPORT_START */
+/* Plan and sport layout: less vertical, more dashboard-like. */
+
+function ui5WorkoutDateLabel(w){
+  return `${w.date||''} · ${w.time||''}`;
+}
+function ui5SportCard(w){
+  const kcal = Number(w.kcal||0);
+  const km = Number(w.distance_km||0);
+  const min = Number(w.minutes||0);
+  return `<article class="ui5-sport-card">
+    <div class="ui5-sport-head">
+      <div><b>${w.name||'Entreno'}</b><small>${ui5WorkoutDateLabel(w)}</small></div>
+      <button class="btn small danger" onclick="deleteWorkout(${w.id})">×</button>
     </div>
-    <div class="card note-box compact-help"><h3>📌 Método rápido</h3><p><b>1)</b> Foto etiqueta opcional.<br><b>2)</b> Pega texto OCR si lo tienes.<br><b>3)</b> Revisa valores y guarda.</p><p class="muted">No se inventan datos: si la lectura falla, deja el campo vacío para revisar a mano.</p></div>
-  </div>
-  <div class="section-title"><div><h3>Alimentos guardados</h3><p>Lista depurada visualmente; se ocultan duplicados evidentes.</p></div><input id="foodFilter" placeholder="filtrar..." style="max-width:300px" oninput="renderFoodList()"></div>
-  <div id="foodList" class="grid cols-3"></div>`;
-  renderFoodList();
+    <div class="ui5-sport-metrics">
+      <span><b>${fmt(min)}</b><small>min</small></span>
+      <span><b>${fmt(km)}</b><small>km</small></span>
+      <span><b>${fmt(kcal)}</b><small>kcal</small></span>
+    </div>
+    <p>${w.notes||''}</p>
+  </article>`;
 }
 
-function renderFoodList(){
-  const foods=uniqueFoodsForList();
-  $('#foodList').innerHTML=foods.map(f=>`<div class="card food-card">${f.photo_path?`<img class="food-photo" src="${f.photo_path}" alt="foto etiqueta">`:''}<h3>${f.purchased?'✅':'🥫'} ${f.name}</h3><p class="muted">${f.brand||''}</p><div class="chips"><span class="chip">${fmt(f.kcal)} kcal/100g</span><span class="chip">${fmt(f.protein)} g prot</span><span class="chip">típico ${fmt(f.typical_g)} g</span></div><p class="source">${f.source_note||''}</p><p>${f.notes||''}</p></div>`).join('');
+function renderSport(){
+  const all=[...state.workouts].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  const last7=all.filter(w=>{
+    try{return (Date.now()-new Date(w.date+'T12:00:00').getTime()) <= 7*86400000;}catch{return false}
+  });
+  const totalKcal=last7.reduce((a,w)=>a+Number(w.kcal||0),0);
+  const totalMin=last7.reduce((a,w)=>a+Number(w.minutes||0),0);
+  const totalKm=last7.reduce((a,w)=>a+Number(w.distance_km||0),0);
+
+  $('#view').innerHTML=`
+    <section class="ui5-sport-hero">
+      <div><span class="ui5-kicker">Deporte</span><h3>Registrar o revisar actividad</h3><p>Strava queda como fuente principal; el manual sirve para ajustes rápidos.</p></div>
+      <div class="ui5-sport-summary">
+        <span><b>${fmt(totalKcal)}</b><small>kcal 7 días</small></span>
+        <span><b>${fmt(totalMin)}</b><small>min 7 días</small></span>
+        <span><b>${fmt(totalKm)}</b><small>km 7 días</small></span>
+      </div>
+    </section>
+
+    <div class="ui5-sport-layout">
+      <div class="card ui5-sport-form">
+        <h3>🏋️ Nuevo entreno</h3>
+        <div class="row compact-row">
+          <div class="field span-3"><label>Fecha</label><input id="sDate" type="date" value="${today()}"></div>
+          <div class="field span-2"><label>Hora</label><input id="sTime" type="time" value="${nowHM()}"></div>
+          <div class="field span-4"><label>Ejercicio</label><select id="sName">${state.exercises.map(e=>`<option>${e.name}</option>`).join('')}</select></div>
+          <div class="field span-3"><label>Minutos</label><input id="sMin" type="number" inputmode="decimal"></div>
+          <div class="field span-3"><label>Distancia km</label><input id="sKm" type="number" step="0.01" inputmode="decimal"></div>
+          <div class="field span-3"><label>Calorías reloj</label><input id="sKcal" type="number" placeholder="vacío = estima"></div>
+          <div class="field span-6"><label>Notas</label><input id="sNotes" placeholder="Strava, reloj, sensación, etc."></div>
+          <div class="field span-3"><label>&nbsp;</label><button class="btn" onclick="saveWorkout()">Guardar entreno</button></div>
+        </div>
+      </div>
+
+      <div class="card ui5-exercise-form">
+        <h3>➕ Tipo ejercicio</h3>
+        <p class="muted">Añade solo si falta un tipo manual. Para Strava no hace falta.</p>
+        <div class="row compact-row">
+          <div class="field span-6"><label>Nombre</label><input id="eName" placeholder="Ej. Caminata suave"></div>
+          <div class="field span-3"><label>MET</label><input id="eMet" type="number" value="5"></div>
+          <div class="field span-3"><label>&nbsp;</label><button class="btn secondary" onclick="saveExercise()">Guardar</button></div>
+          <div class="field span-12"><label>Notas</label><input id="eNotes"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title ui5-section-title"><div><h3>Historial deporte</h3><p>${all.length} entrenos · últimos primero</p></div></div>
+    <div class="ui5-sport-history">${all.map(ui5SportCard).join('')}</div>
+  `;
 }
 
-/* V010_WEIGHT_FOOD_UI_END */
+function ui5MealLine(label, value){
+  return value ? `<p><b>${label}</b><span>${value}</span></p>` : '';
+}
+function ui5PlanDayCard(d, idx){
+  return `<article class="ui5-plan-day">
+    <div class="ui5-plan-day-head"><span>${idx+1}</span><b>${d.day||'Día'}</b></div>
+    ${ui5MealLine('Desayuno', d.breakfast)}
+    ${ui5MealLine('Comida', d.lunch)}
+    ${ui5MealLine('Merienda', d.snack)}
+    ${ui5MealLine('Cena', d.dinner)}
+  </article>`;
+}
+function renderPlanPayload(p){
+  const days=p.days||[];
+  return `<div class="ui5-plan-current">
+    <div class="ui5-plan-intro">
+      <span class="ui5-kicker">Plan actual</span>
+      <h3>${p.name||'Plan semanal'}</h3>
+      <p>${p.notes||'Sin notas.'}</p>
+    </div>
+    <div class="ui5-plan-days">${days.map(ui5PlanDayCard).join('')}</div>
+  </div>`;
+}
+function renderPlan(){
+  const p=state.plans[0]?JSON.parse(state.plans[0].payload):null;
+  $('#view').innerHTML=`
+    <div class="ui5-plan-layout">
+      <section class="card ui5-plan-import">
+        <h3>📥 Importar plan</h3>
+        <p class="muted">Pega JSON semanal. El plan se muestra en tarjetas horizontales.</p>
+        <textarea id="planRaw" placeholder='{"name":"Semana...","days":[...]}'></textarea>
+        <button class="btn" onclick="savePlan()">Importar plan</button>
+      </section>
+      <section class="card ui5-plan-board">
+        ${p?renderPlanPayload(p):'<div class="empty">Sin plan.</div>'}
+      </section>
+    </div>`;
+}
+/* DPP_UI5_PLAN_SPORT_END */
+
+
+
+
+
+
+
+
+
+/* DPP_UI5_PLAN_EDITOR_START */
+/* Plan editor v2 local-only.
+   Fixes missing escapeHtml, broken plan parsing, and blank Plan page.
+   No repo push, no DB schema change, keeps existing /api/plans endpoint. */
+
+function ui5Esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[c]));
+}
+
+function ui5SafePlanPayload(raw){
+  if(!raw) return null;
+  try{
+    if(typeof raw === 'string') return JSON.parse(raw);
+    if(typeof raw === 'object') return raw;
+  }catch(e){
+    console.warn('Plan JSON inválido', e, raw);
+  }
+  return null;
+}
+
+function ui5PlanDefaultWeek(){
+  return {
+    name: "Semana dieta controlada · editable",
+    notes: "Plan local editable. Proteína 130–150 g/día, aceite medido, pasta/arroz en seco. Ajustar según deporte y hambre real.",
+    days: [
+      {
+        day: "Viernes · hoy",
+        breakfast: "Tostada 42 g + café con edulcorante + yogur proteico 120 g.",
+        lunch: "80 g pasta seca + pollo 200–224 g crudo + verdura/judía verde. Aceite 5 g.",
+        snack: "Si hay 12K/andaina: plátano o 2–3 tortitas + agua. Si no hay deporte: yogur proteico o fruta.",
+        dinner: "Cena limpia: 2 huevos + jamón cocido extra 70–90 g + judía verde 250 g. Queso curado 10–15 g opcional.",
+        target: "130–150 g proteína · aceite 5–10 g",
+        status: "planificado"
+      },
+      {
+        day: "Sábado",
+        breakfast: "Tostada + café + yogur proteico.",
+        lunch: "Proteína principal + verdura + arroz/pasta solo si hay actividad.",
+        snack: "Fruta + yogur proteico. Gelatina 0 si hay antojo.",
+        dinner: "Proteína + verdura. Evitar dulce nocturno.",
+        target: "déficit controlado",
+        status: "borrador"
+      },
+      {
+        day: "Domingo",
+        breakfast: "Desayuno base: tostada + café + yogur proteico.",
+        lunch: "Comida flexible: prioriza proteína y mide pan/arroz/pasta.",
+        snack: "Yogur proteico o fruta.",
+        dinner: "Pescado/huevos/atún + verdura.",
+        target: "cerrar semana limpio",
+        status: "borrador"
+      },
+      {
+        day: "Lunes",
+        breakfast: "Tostada + café + yogur proteico.",
+        lunch: "Tupper: carbo pesado en seco + pollo/atún + verdura + 5 g aceite.",
+        snack: "Queso fresco batido o yogur proteico.",
+        dinner: "Huevos/pescado + verdura.",
+        target: "rutina",
+        status: "borrador"
+      }
+    ]
+  };
+}
+
+function ui5PlanNormalize(p){
+  p = p || {};
+  if(!Array.isArray(p.days)) p.days = [];
+  return {
+    name: p.name || "Plan semanal",
+    notes: p.notes || "",
+    days: p.days.map(d => ({
+      day: d.day || "",
+      breakfast: d.breakfast || "",
+      lunch: d.lunch || "",
+      snack: d.snack || "",
+      dinner: d.dinner || "",
+      target: d.target || "",
+      status: d.status || "borrador"
+    }))
+  };
+}
+
+function ui5CurrentPlan(){
+  try{
+    const row = state.plans && state.plans.length ? state.plans[0] : null;
+    const parsed = row ? ui5SafePlanPayload(row.payload) : null;
+    return ui5PlanNormalize(parsed || ui5PlanDefaultWeek());
+  }catch(e){
+    console.error('Error cargando plan', e);
+    return ui5PlanNormalize(ui5PlanDefaultWeek());
+  }
+}
+
+function ui5PlanStats(p){
+  const days = p.days || [];
+  const planned = days.filter(d => [d.breakfast,d.lunch,d.snack,d.dinner].some(x => String(x||'').trim())).length;
+  return {days: days.length, planned, missing: Math.max(0, 7 - days.length)};
+}
+
+function ui5PlanDayHtml(d, idx){
+  const status = d.status || "borrador";
+  return `<article class="ui5-edit-day" data-plan-day="${idx}">
+    <header>
+      <span>${idx+1}</span>
+      <div>
+        <input class="ui5-day-title" data-plan-field="day" value="${ui5Esc(d.day)}" placeholder="Ej. Viernes · recuperación">
+        <select data-plan-field="status">
+          ${["planificado","pendiente ajustar","borrador","realizado"].map(x => `<option value="${ui5Esc(x)}" ${x===status?'selected':''}>${ui5Esc(x)}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn small danger" onclick="ui5DeletePlanDay(${idx})">×</button>
+    </header>
+    <label><b>Desayuno</b><textarea data-plan-field="breakfast" placeholder="Tostada + yogur...">${ui5Esc(d.breakfast)}</textarea></label>
+    <label><b>Comida</b><textarea data-plan-field="lunch" placeholder="Tupper, pasta/arroz, proteína...">${ui5Esc(d.lunch)}</textarea></label>
+    <label><b>Merienda</b><textarea data-plan-field="snack" placeholder="Fruta, yogur, pre-entreno...">${ui5Esc(d.snack)}</textarea></label>
+    <label><b>Cena</b><textarea data-plan-field="dinner" placeholder="Proteína + verdura...">${ui5Esc(d.dinner)}</textarea></label>
+    <label><b>Objetivo</b><input data-plan-field="target" value="${ui5Esc(d.target)}" placeholder="130–150 g proteína / aceite 5 g"></label>
+  </article>`;
+}
+
+function ui5ReadPlanFromDom(){
+  const p = {
+    name: document.querySelector('#planName')?.value || "Plan semanal",
+    notes: document.querySelector('#planNotes')?.value || "",
+    days: []
+  };
+  document.querySelectorAll('[data-plan-day]').forEach(card => {
+    const d = {};
+    card.querySelectorAll('[data-plan-field]').forEach(el => {
+      d[el.dataset.planField] = el.value || "";
+    });
+    p.days.push(d);
+  });
+  return ui5PlanNormalize(p);
+}
+
+function ui5RefreshPlanStats(p){
+  p = p || ui5ReadPlanFromDom();
+  const st = ui5PlanStats(p);
+  const el = document.querySelector('#ui5PlanStats');
+  if(el) el.innerHTML = `
+    <span><b>${st.days}</b><small>días</small></span>
+    <span><b>${st.planned}</b><small>con comidas</small></span>
+    <span><b>${st.missing}</b><small>faltan</small></span>`;
+}
+
+function ui5RenderPlanBoard(p){
+  const board = document.querySelector('#ui5PlanBoard');
+  if(!board) return;
+  board.innerHTML = (p.days||[]).map(ui5PlanDayHtml).join('');
+  ui5RefreshPlanStats(p);
+}
+
+function ui5AddPlanDay(){
+  const p = ui5ReadPlanFromDom();
+  p.days.push({day:"Nuevo día", breakfast:"", lunch:"", snack:"", dinner:"", target:"130–150 g proteína", status:"borrador"});
+  ui5RenderPlanBoard(p);
+}
+
+function ui5DeletePlanDay(idx){
+  const p = ui5ReadPlanFromDom();
+  p.days.splice(idx,1);
+  ui5RenderPlanBoard(p);
+}
+
+function ui5CompletePlanWeek(){
+  const p = ui5ReadPlanFromDom();
+  while(p.days.length < 7){
+    const n = p.days.length + 1;
+    p.days.push({
+      day: `Día ${n}`,
+      breakfast: "Desayuno base: tostada + café + yogur proteico.",
+      lunch: "Proteína + carbo pesado en seco si toca + verdura.",
+      snack: "Fruta o yogur proteico.",
+      dinner: "Proteína + verdura. Aceite medido.",
+      target: "ajustar según actividad",
+      status: "borrador"
+    });
+  }
+  ui5RenderPlanBoard(p);
+  toast("Semana completada en borrador");
+}
+
+function ui5ApplyDefaultPlan(){
+  const p = ui5PlanDefaultWeek();
+  const n = document.querySelector('#planName');
+  const notes = document.querySelector('#planNotes');
+  if(n) n.value = p.name;
+  if(notes) notes.value = p.notes;
+  ui5RenderPlanBoard(p);
+  toast("Plan base cargado");
+}
+
+async function ui5SaveEditablePlan(){
+  const p = ui5ReadPlanFromDom();
+  await api('/api/plans', {method:'POST', body: JSON.stringify({raw: JSON.stringify(p, null, 2)})});
+  toast("Plan guardado");
+  await load();
+  page='plan';
+  renderNav();
+  render();
+}
+
+function ui5ExportPlanJson(){
+  const p = ui5ReadPlanFromDom();
+  const raw = JSON.stringify(p, null, 2);
+  const box = document.querySelector('#planRaw');
+  if(box) box.value = raw;
+  navigator.clipboard?.writeText(raw).then(()=>toast("JSON copiado")).catch(()=>toast("JSON listo abajo"));
+}
+
+function renderPlan(){
+  let p;
+  try{
+    p = ui5CurrentPlan();
+  }catch(e){
+    console.error(e);
+    p = ui5PlanNormalize(ui5PlanDefaultWeek());
+  }
+  const st = ui5PlanStats(p);
+  $('#view').innerHTML = `
+    <section class="ui5-plan-hero2">
+      <div>
+        <span class="ui5-kicker">Plan semanal editable</span>
+        <h3>Planifica horizontal, corrige rápido y guarda.</h3>
+        <p>Si el plan anterior venía roto, pulsa “Cargar plan base” o “Completar semana”.</p>
+      </div>
+      <div id="ui5PlanStats" class="ui5-plan-stats">
+        <span><b>${st.days}</b><small>días</small></span>
+        <span><b>${st.planned}</b><small>con comidas</small></span>
+        <span><b>${st.missing}</b><small>faltan</small></span>
+      </div>
+    </section>
+
+    <section class="card ui5-plan-toolbar">
+      <div class="row compact-row">
+        <div class="field span-5"><label>Nombre del plan</label><input id="planName" value="${ui5Esc(p.name)}" oninput="ui5RefreshPlanStats()"></div>
+        <div class="field span-7"><label>Notas</label><input id="planNotes" value="${ui5Esc(p.notes)}" oninput="ui5RefreshPlanStats()"></div>
+      </div>
+      <div class="ui5-plan-actions">
+        <button class="btn" onclick="ui5SaveEditablePlan()">Guardar cambios</button>
+        <button class="btn secondary" onclick="ui5AddPlanDay()">Añadir día</button>
+        <button class="btn secondary" onclick="ui5CompletePlanWeek()">Completar semana</button>
+        <button class="btn secondary" onclick="ui5ApplyDefaultPlan()">Cargar plan base</button>
+        <button class="btn secondary" onclick="ui5ExportPlanJson()">Copiar/mostrar JSON</button>
+      </div>
+    </section>
+
+    <section id="ui5PlanBoard" class="ui5-edit-plan-board">
+      ${(p.days||[]).map(ui5PlanDayHtml).join('')}
+    </section>
+
+    <section class="card ui5-plan-json">
+      <h3>JSON del plan</h3>
+      <p class="muted">Para importar otro plan: pega JSON y pulsa importar.</p>
+      <textarea id="planRaw" placeholder='{"name":"Semana...","days":[...]}'></textarea>
+      <button class="btn secondary" onclick="savePlan()">Importar JSON pegado</button>
+    </section>`;
+}
+
+/* DPP_UI5_PLAN_EDITOR_END */
 

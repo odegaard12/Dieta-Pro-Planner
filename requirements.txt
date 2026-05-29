@@ -2,3 +2,5 @@ Flask
 requests
 
 # Dependencies intentionally minimal.
+Pillow>=10.0.0
+pytesseract>=0.3.10
